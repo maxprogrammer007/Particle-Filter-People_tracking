@@ -1,5 +1,6 @@
 import numpy as np
 import random
+import cv2
 
 class Particle:
     def __init__(self, x, y):
@@ -12,7 +13,7 @@ class ParticleFilter:
         self.num_particles = num_particles
         self.particles = [Particle(initial_pos[0], initial_pos[1]) for _ in range(num_particles)]
 
-    def predict(self, move_std=15):
+    def predict(self, move_std=5):
         for p in self.particles:
             p.x += np.random.normal(0, move_std)
             p.y += np.random.normal(0, move_std)
