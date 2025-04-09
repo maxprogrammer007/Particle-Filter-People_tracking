@@ -1,6 +1,6 @@
 
 
-```markdown
+
 # Particle Filter-Based People Tracking System
 
 This project implements a **real-time people tracking system** based on the research paper:  
@@ -42,7 +42,7 @@ people_tracking_particle_filter/
     └── control_room_test.mp4       # Test video file
 ```
 
----
+
 
 ## 🛠️ How It Works
 
