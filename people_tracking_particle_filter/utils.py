@@ -6,4 +6,6 @@ def draw_particles(frame, particles):
 
 def draw_tracking(frame, centers):
     for (x, y) in centers:
-        cv2.circle(frame, (x, y), 8, (255, 0, 0), 2)
+        cv2.circle(frame, (x, y), 20, (255, 0, 0), 2)  # bigger blue circle
+        cv2.putText(frame, "Tracked", (x-20, y-20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+
