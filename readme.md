@@ -1,9 +1,4 @@
-Of course! 📄  
-Here’s a fully updated **README.md** you can use, reflecting **all the improvements** you made:
 
----
-
-# 📄 README.md
 
 ```markdown
 # Particle Filter-Based People Tracking System
