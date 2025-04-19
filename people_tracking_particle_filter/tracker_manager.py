@@ -1,19 +1,25 @@
+# tracker_manager.py
 from particle_filter import ParticleFilter
 from histogram_model import get_color_histogram
 
 class TrackerManager:
-    def __init__(self):
+    def __init__(self, num_particles=75, noise=5.0, patch_size=20):
         self.trackers = []
+        self.num_particles = num_particles
+        self.noise = noise
+        self.patch_size = patch_size
 
     def update(self, frame, detections):
-        # TODO: Add smart association (for now, assume 1-to-1)
         if len(self.trackers) < len(detections):
             for det in detections[len(self.trackers):]:
                 x, y, w, h = det
                 center = (x + w // 2, y + h // 2)
                 patch = frame[y:y+h, x:x+w]
                 hist = get_color_histogram(patch)
-                pf = ParticleFilter(center)
+                pf = ParticleFilter(center,
+                                    num_particles=self.num_particles,
+                                    noise=self.noise,
+                                    patch_size=self.patch_size)
                 self.trackers.append((pf, hist))
 
         for pf, hist in self.trackers:
