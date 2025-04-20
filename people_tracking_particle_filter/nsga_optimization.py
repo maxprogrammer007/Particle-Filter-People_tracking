@@ -25,6 +25,7 @@ toolbox.register("population", tools.initRepeat, list, toolbox.individual)
 
 # Evaluation function
 def evaluate(individual):
+    print(f"🔍 Evaluating: Particles={individual[0]}, Noise={individual[1]:.2f}, Patch={individual[2]}")
     num_particles, motion_noise, patch_size = individual
     mota, id_switches, fps = run_tracking_evaluation(
         VIDEO_PATH,
@@ -32,6 +33,7 @@ def evaluate(individual):
         motion_noise=motion_noise,
         patch_size=patch_size
     )
+    print(f"✅ Result: MOTA={mota}, ID Switches={id_switches}, FPS={fps:.2f}")
     return mota, id_switches, fps
 
 toolbox.register("evaluate", evaluate)
