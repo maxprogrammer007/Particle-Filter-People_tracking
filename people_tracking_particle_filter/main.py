@@ -1,29 +1,32 @@
-# main.py
 import cv2
 from blob_detection import detect_blobs
 from tracker_manager import TrackerManager
 from utils import draw_particles, draw_tracking
-
-# Optional: pass parameters (these can also come from NSGA-II)
-NUM_PARTICLES = 75
-MOTION_NOISE = 5.0
-PATCH_SIZE = 20
+from config import (
+    NUM_PARTICLES,
+    MOTION_NOISE,
+    PATCH_SIZE,
+    USE_DEEP_FEATURES,
+    VIDEO_PATH,
+    OUTPUT_PATH
+)
 
 def main():
-    cap = cv2.VideoCapture("sample_videos/test_video.mp4")
+    cap = cv2.VideoCapture(VIDEO_PATH)
 
     tracker_manager = TrackerManager(
         num_particles=NUM_PARTICLES,
         noise=MOTION_NOISE,
-        patch_size=PATCH_SIZE
+        patch_size=PATCH_SIZE,
+        use_deep_features=USE_DEEP_FEATURES
     )
 
-    frame_width = int(cap.get(3))
-    frame_height = int(cap.get(4))
+    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    out = cv2.VideoWriter('output_tracking.avi', 
-                          cv2.VideoWriter_fourcc(*'XVID'), 
-                          20.0, 
+    out = cv2.VideoWriter(OUTPUT_PATH,
+                          cv2.VideoWriter_fourcc(*'XVID'),
+                          20.0,
                           (frame_width, frame_height))
 
     while True:
