@@ -1,3 +1,4 @@
+# particle_filter.py
 import numpy as np
 import random
 import cv2
@@ -9,21 +10,24 @@ class Particle:
         self.weight = 1.0
 
 class ParticleFilter:
-    def __init__(self, initial_pos, num_particles=50):
+    def __init__(self, initial_pos, num_particles=50, noise=5.0, patch_size=20):
         self.num_particles = num_particles
+        self.noise = noise
+        self.patch_size = patch_size
         self.particles = [Particle(initial_pos[0], initial_pos[1]) for _ in range(num_particles)]
 
-    def predict(self, move_std=5):
+    def predict(self):
         for p in self.particles:
-            p.x += np.random.normal(0, move_std)
-            p.y += np.random.normal(0, move_std)
+            p.x += np.random.normal(0, self.noise)
+            p.y += np.random.normal(0, self.noise)
 
     def update(self, frame, target_histogram, histogram_func):
         frame_h, frame_w = frame.shape[:2]
         for p in self.particles:
-            x = int(min(max(p.x, 0), frame_w-1))
-            y = int(min(max(p.y, 0), frame_h-1))
-            patch = frame[max(0,y-10):y+10, max(0,x-10):x+10]
+            x = int(min(max(p.x, 0), frame_w - 1))
+            y = int(min(max(p.y, 0), frame_h - 1))
+            half_patch = self.patch_size // 2
+            patch = frame[max(0, y - half_patch):y + half_patch, max(0, x - half_patch):x + half_patch]
             if patch.size > 0:
                 particle_hist = histogram_func(patch)
                 p.weight = cv2.compareHist(target_histogram, particle_hist, cv2.HISTCMP_BHATTACHARYYA)

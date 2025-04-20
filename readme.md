@@ -1,27 +1,28 @@
 
+# Particle Filter‑Based People Tracking with NSGA‑II Optimization
 
-
-# Particle Filter-Based People Tracking System
-
-This project implements a **real-time people tracking system** based on the research paper:  
-**"A Reliable People Tracking in Nuclear Power Plant Control Room Monitoring System Using Particle Filter"**
-
-The system detects humans and tracks them over time using **Particle Filters** and **Color Histogram Matching**.
+This project implements a **real‑time people tracking system** inspired by the paper  
+“A Reliable People Tracking in Nuclear Power Plant Control Room Monitoring System Using Particle Filter.”  
+It uses HOG for person detection, classic particle filters with color‑histogram observation,  
+and NSGA‑II to automatically tune tracking parameters for best accuracy, stability, and speed.
 
 ---
 
 ## 🚀 Key Features
 
-- **Real-Time People Detection** using HOG-based human detector (OpenCV).
+- **Person Detection**: HOG‑based human detector (OpenCV).  
 - **Particle Filter Tracking**:
-  - Predicts the next position of each detected person.
-  - Updates based on color histogram similarity.
-  - Resamples particles to maintain robust tracking.
-- **Improved Foreground Detection** *(optional old version with background subtraction available)*.
-- **Automatic Output Saving**:
-  - Saves the tracked video as `output_tracking.avi`.
-- **Auto Video Looping**:
-  - Automatically restarts the video when it ends for continuous demonstration.
+  - Predicts object motion with Gaussian noise.
+  - Updates particle weights via color‑histogram similarity.
+  - Resamples to focus on high‑likelihood hypotheses.
+- **NSGA‑II Parameter Optimization**:
+  - Evolves `(num_particles, motion_noise, patch_size)`
+  - Balances three objectives:  
+    1. **Tracking Accuracy** (MOTA ↑)  
+    2. **ID‑Switch Count** (↓)  
+    3. **Frame Rate** (FPS ↑)
+- **Automated Evaluation** in `evaluation.py` for MOTA, ID‑switches, FPS.  
+- **Pareto‑Front Visualization** in `plot_pareto.py`.  
 
 ---
 
@@ -29,99 +30,118 @@ The system detects humans and tracks them over time using **Particle Filters** a
 
 ```plaintext
 people_tracking_particle_filter/
-├── background_subtraction.py      # (Old, optional - now replaced with HOG detection)
-├── blob_detection.py               # Human detection using HOG descriptor
-├── particle_filter.py              # Particle Filter classes (Particle + ParticleFilter)
-├── histogram_model.py              # Color histogram extraction and comparison
-├── tracker_manager.py              # Manages multiple trackers (one per detected person)
-├── utils.py                        # Drawing particles and tracking centers
-├── main.py                         # Main script to run tracking
-├── config.py                       # Configuration parameters (if needed)
-├── README.md                        # Project description (this file)
-└── sample_videos/
-    └── control_room_test.mp4       # Test video file
+├── background_subtraction.py      # legacy (optional), not used by default
+├── blob_detection.py              # HOG human detection
+├── particle_filter.py             # Particle + ParticleFilter classes
+├── histogram_model.py             # Color‑histogram extractor
+├── tracker_manager.py             # Manages one PF per detected person
+├── utils.py                       # Drawing helpers (particles, centers)
+├── main.py                        # Runs the tracker with fixed params
+├── evaluation.py                  # run_tracking_evaluation() wrapper
+├── nsga_optimization.py           # NSGA‑II optimizer (uses DEAP)
+├── plot_pareto.py                 # Pareto front plotting (matplotlib)
+├── config.py                      # Default parameter ranges (optional)
+├── sample_videos/
+│   └── control_room_test.mp4      # Test video file
+└── README.md                      # Project description (this file)
 ```
 
-
+---
 
 ## 🛠️ How It Works
 
-1. **Detect Humans**:  
-   Using OpenCV’s pre-trained **HOG People Detector**.
+1. **Detect People**  
+   Each frame is scanned with OpenCV’s HOG‑based people detector.
 
-2. **Initialize Particle Filters**:  
-   For each detected person, a **Particle Filter** is initialized at the center.
+2. **Initialize Particle Filters**  
+   For every new detection, a `ParticleFilter` is created at the person’s center, using default or optimized parameters.
 
-3. **Particle Prediction**:  
-   Particles move slightly around the predicted position based on a simple motion model.
+3. **Predict & Update**  
+   - **Predict**: Particles move by adding random Gaussian noise.  
+   - **Update**: Each particle’s patch color histogram is compared to the target’s original histogram using the Bhattacharyya distance.  
+   - **Resample**: Particles with lower weight are discarded; high‑weight ones are duplicated.
 
-4. **Histogram Matching**:  
-   Each particle is weighted by comparing its color histogram to the target person's appearance.
+4. **Visualize & Save**  
+   - Green dots for particles; blue circles for estimated centers.  
+   - Video is shown live and saved to `output_tracking.avi`.
 
-5. **Resampling**:  
-   Particles with better matching survive, guiding the tracker.
+5. **Automated Evaluation** (`evaluation.py`)  
+   Runs the tracker end‑to‑end, returning three metrics:  
+   - **MOTA** (Multiple Object Tracking Accuracy)  
+   - **ID‑Switch Count**  
+   - **FPS**
 
-6. **Tracking Visualization**:  
-   Particles (green dots) and estimated centers (blue circles) are drawn over each person.
+6. **NSGA‑II Optimization** (`nsga_optimization.py`)  
+   Uses DEAP to evolve `(num_particles, motion_noise, patch_size)` over generations, optimizing the three objectives simultaneously.
 
-7. **Save Output Video**:  
-   The final tracking output is saved automatically as `output_tracking.avi`.
+7. **Pareto‑Front Visualization** (`plot_pareto.py`)  
+   Creates a 2D/3D scatter of the final population’s fitness values, showing the trade‑offs between accuracy, stability, and speed.
 
 ---
 
 ## ⚙️ Requirements
 
-- Python 3.8+
-- OpenCV (`opencv-python`, `opencv-contrib-python`)
-- Numpy
+- Python 3.8+  
+- [OpenCV](https://pypi.org/project/opencv-python/)  
+- `numpy`  
+- `deap` (for NSGA‑II)  
+- `matplotlib` (for Pareto plotting)
 
-Install with:
+Install via:
 
 ```bash
-pip install opencv-python opencv-contrib-python numpy
+pip install opencv-python numpy deap matplotlib
 ```
+
+---
+
+## 📽️ Usage
+
+1. **Run the basic tracker** (with default params):
+   ```bash
+   python main.py
+   ```
+
+2. **Run NSGA‑II optimization**:
+   ```bash
+   python nsga_optimization.py
+   ```
+   This will print out the Pareto‑optimal configurations.
+
+3. **Plot Pareto front** (in a Python REPL or separate script):
+   ```python
+   from nsga_optimization import run_nsga
+   from plot_pareto import plot_pareto
+
+   pop, log, hof = run_nsga(generations=10, pop_size=20)
+   plot_pareto(pop)
+   ```
 
 ---
 
 ## 📈 Improvements Over Basic Version
 
-| Improvement | Description |
-|:---|:---|
-| **HOG People Detection** | Reliable detection of real humans instead of just moving blobs. |
-| **Auto Restart Video** | Restarts video automatically when finished. |
-| **Output Video Saving** | Saves the tracking visualization into an `.avi` file. |
-| **Better Particle Management** | Improved motion prediction and tracking accuracy. |
+| Improvement            | Description                                                        |
+|------------------------|--------------------------------------------------------------------|
+| NSGA‑II Optimization   | Automated tuning of PF parameters for multi‑objective balance      |
+| Automated Evaluation   | `evaluation.py` wraps MOTA, ID‑switch, FPS measurement             |
+| Pareto Visualization   | `plot_pareto.py` shows trade‑offs between accuracy, stability, speed |
 
 ---
 
-## 📽️ How to Run
+## 🎯 Future Scope
 
-1. Place your test video inside `sample_videos/` folder.
-2. Update the video name in `main.py` if needed.
-3. Run the tracking system:
-
-```bash
-python main.py
-```
-
-4. Press `ESC` to exit.
-5. Find your saved output in the project folder as `output_tracking.avi`.
-
----
-
-## 🎯 Future Scope (Optional Extensions)
-
-- Replace HOG detector with more accurate lightweight deep models (e.g., YOLOv4-tiny).
-- Multi-camera tracking (extend to multiple camera feeds).
-- Add Re-Identification models for robust occlusion handling.
-- Improve real-time performance with GPU acceleration (CUDA).
+- **Multi‑camera tracking**  
+- **Memory‑augmented ReID** for long occlusions  
+- **Sensor fusion** (RGB + depth/thermal)  
+- **Uncertainty‑aware PF** with adaptive re‑initialization  
 
 ---
 
 # 🙌 Credits
 
-- Based on the research paper:  
-  **"A Reliable People Tracking in Nuclear Power Plant Control Room Monitoring System Using Particle Filter"**
-- Extended with real human detection for practical implementation.
+Based on:  
+_A Reliable People Tracking in Nuclear Power Plant Control Room Monitoring System Using Particle Filter_ (IEEE)  
+Extended with HOG detection, NSGA‑II optimization, and automated evaluation/visualization.
 
----
+
