@@ -1,6 +1,4 @@
 import numpy as np
-import random
-import cv2
 import torch
 import torch.nn.functional as F
 from deep_feature_extractor import extract_deep_feature
@@ -12,12 +10,13 @@ class Particle:
         self.weight = 1.0
 
 class ParticleFilter:
-    def __init__(self, initial_pos, num_particles=50, noise=5.0, patch_size=20):
+    def __init__(self, initial_pos, num_particles=50, noise=5.0, patch_size=20, device=None):
         self.num_particles = num_particles
         self.noise = noise
         self.patch_size = patch_size
+        self.device = device
         self.particles = [Particle(initial_pos[0], initial_pos[1]) for _ in range(num_particles)]
-        self.target_feature = None  # Will hold deep feature vector
+        self.target_feature = None
 
     def predict(self):
         for p in self.particles:
@@ -28,9 +27,8 @@ class ParticleFilter:
         frame_h, frame_w = frame.shape[:2]
         half_patch = self.patch_size // 2
 
-        # Extract target feature once
         if use_deep_features and self.target_feature is None:
-            self.target_feature = extract_deep_feature(target_patch)
+            self.target_feature = extract_deep_feature(target_patch, device=self.device)
 
         for p in self.particles:
             x = int(np.clip(p.x, 0, frame_w - 1))
@@ -41,12 +39,13 @@ class ParticleFilter:
 
             if patch.size > 0:
                 if use_deep_features:
-                    particle_feat = extract_deep_feature(patch)
-                    sim = F.cosine_similarity(self.target_feature.unsqueeze(0), particle_feat.unsqueeze(0)).item()
-                    # Cosine similarity: 1 = perfect match → convert to distance
+                    particle_feat = extract_deep_feature(patch, device=self.device)
+                    sim = F.cosine_similarity(
+                        torch.tensor(self.target_feature).unsqueeze(0),
+                        torch.tensor(particle_feat).unsqueeze(0)
+                    ).item()
                     p.weight = 1.0 - sim
                 else:
-                    # Fallback if needed
                     p.weight = 1.0
             else:
                 p.weight = 1.0
@@ -55,9 +54,8 @@ class ParticleFilter:
 
     def resample(self):
         weights = np.array([p.weight for p in self.particles])
-        weights = np.exp(-weights)  # Convert to likelihoods
+        weights = np.exp(-weights)
         weights /= np.sum(weights)
-
         indices = np.random.choice(len(self.particles), len(self.particles), p=weights)
         self.particles = [self.particles[i] for i in indices]
 

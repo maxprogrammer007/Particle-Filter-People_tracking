@@ -1,4 +1,5 @@
 import cv2
+import torch
 from blob_detection import detect_blobs
 from tracker_manager import TrackerManager
 from utils import draw_particles, draw_tracking
@@ -12,13 +13,17 @@ from config import (
 )
 
 def main():
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[INFO] Running on: {device}")
+
     cap = cv2.VideoCapture(VIDEO_PATH)
 
     tracker_manager = TrackerManager(
         num_particles=NUM_PARTICLES,
         noise=MOTION_NOISE,
         patch_size=PATCH_SIZE,
-        use_deep_features=USE_DEEP_FEATURES
+        use_deep_features=USE_DEEP_FEATURES,
+        device=device  # 👈 Forward device
     )
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
