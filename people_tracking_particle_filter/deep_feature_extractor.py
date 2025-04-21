@@ -1,39 +1,48 @@
 import torch
-import torchvision.models as models
+import torch.nn.functional as F
 import torchvision.transforms as transforms
-import cv2
+from torchvision.models import mobilenet_v2, MobileNet_V2_Weights
 import numpy as np
-from torchvision.models import resnet18, ResNet18_Weights
+import cv2
 
-# Load pretrained ResNet18 model and remove the classifier
-weights = ResNet18_Weights.DEFAULT
-model = resnet18(weights=weights)
-model = torch.nn.Sequential(*list(model.children())[:-1])  # Remove last FC layer
-model.eval()
+# Use GPU if available
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Preprocessing pipeline
-preprocess = transforms.Compose([
-    transforms.ToPILImage(),
-    transforms.Resize((224, 224)),
+# Load MobileNetV2 backbone with pretrained weights
+weights = MobileNet_V2_Weights.DEFAULT
+model = mobilenet_v2(weights=weights).features.to(device).eval()
+
+# ImageNet mean/std normalization
+transform = transforms.Compose([
     transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406],  # Standard ImageNet means
-                         std=[0.229, 0.224, 0.225])
+    transforms.Resize((224, 224)),
+    transforms.Normalize(mean=weights.meta['mean'], std=weights.meta['std'])
 ])
 
-def extract_deep_feature(patch: np.ndarray) -> torch.Tensor:
+@torch.no_grad()
+def extract_deep_feature(patch):
     """
-    Extract a 512-dim deep feature vector from an image patch using ResNet18.
-    :param patch: BGR OpenCV image patch (numpy array)
-    :return: 512-dimensional PyTorch tensor
+    Extracts feature vector from a single patch.
     """
-    if patch.size == 0:
-        return torch.zeros(512)
+    patch_tensor = transform(patch).unsqueeze(0).to(device)
+    feature_map = model(patch_tensor)
+    feature_vector = F.adaptive_avg_pool2d(feature_map, (1, 1)).squeeze().cpu().numpy()
+    return feature_vector / np.linalg.norm(feature_vector)  # Normalize
 
-    # Convert to RGB and preprocess
-    patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-    input_tensor = preprocess(patch_rgb).unsqueeze(0)  # Shape: [1, 3, 224, 224]
+@torch.no_grad()
+def extract_batch_features(patch_list):
+    """
+    Batch process multiple patches and return their normalized feature vectors.
+    Input: list of cv2 patches
+    Output: list of numpy feature vectors
+    """
+    batch = []
+    for patch in patch_list:
+        patch_tensor = transform(patch)
+        batch.append(patch_tensor)
 
-    with torch.no_grad():
-        feature = model(input_tensor)
-
-    return feature.view(-1)  # Flatten to shape [512]
+    batch_tensor = torch.stack(batch).to(device)
+    features = model(batch_tensor)
+    pooled = F.adaptive_avg_pool2d(features, (1, 1)).squeeze(-1).squeeze(-1)
+    normalized = F.normalize(pooled, p=2, dim=1)
+    return normalized.cpu().numpy()
