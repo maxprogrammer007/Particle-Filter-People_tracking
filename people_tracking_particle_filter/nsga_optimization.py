@@ -45,7 +45,7 @@ def evaluate(individual):
         motion_noise=motion_noise,
         patch_size=patch_size,
         max_frames=100,
-        device=device  # 👈 GPU-enabled
+          # 👈 GPU-enabled
     )
 
     elapsed = time.time() - start

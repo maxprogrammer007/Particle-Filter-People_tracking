@@ -27,8 +27,9 @@ class ParticleFilter:
         frame_h, frame_w = frame.shape[:2]
         half_patch = self.patch_size // 2
 
+        # Only extract target feature once
         if use_deep_features and self.target_feature is None:
-            self.target_feature = extract_deep_feature(target_patch, device=self.device)
+            self.target_feature = extract_deep_feature(target_patch)
 
         for p in self.particles:
             x = int(np.clip(p.x, 0, frame_w - 1))
@@ -37,16 +38,15 @@ class ParticleFilter:
             patch = frame[max(0, y - half_patch):y + half_patch,
                           max(0, x - half_patch):x + half_patch]
 
-            if patch.size > 0:
-                if use_deep_features:
-                    particle_feat = extract_deep_feature(patch, device=self.device)
-                    sim = F.cosine_similarity(
-                        torch.tensor(self.target_feature).unsqueeze(0),
-                        torch.tensor(particle_feat).unsqueeze(0)
-                    ).item()
-                    p.weight = 1.0 - sim
-                else:
-                    p.weight = 1.0
+            if patch.size > 0 and use_deep_features:
+                particle_feat = extract_deep_feature(patch)
+                sim = F.cosine_similarity(
+                    self.target_feature.unsqueeze(0),
+                    particle_feat.unsqueeze(0),
+                    dim=1
+                ).item()
+
+                p.weight = 1.0 - sim
             else:
                 p.weight = 1.0
 
@@ -54,7 +54,7 @@ class ParticleFilter:
 
     def resample(self):
         weights = np.array([p.weight for p in self.particles])
-        weights = np.exp(-weights)
+        weights = np.exp(-weights)  # Convert distances to likelihood
         weights /= np.sum(weights)
         indices = np.random.choice(len(self.particles), len(self.particles), p=weights)
         self.particles = [self.particles[i] for i in indices]
