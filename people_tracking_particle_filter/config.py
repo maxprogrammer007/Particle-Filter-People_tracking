@@ -34,3 +34,5 @@ params = load_best_config()
 NUM_PARTICLES = params["NUM_PARTICLES"]
 MOTION_NOISE = params["MOTION_NOISE"]
 PATCH_SIZE = params["PATCH_SIZE"]
+# --- Feature Extractor Type ---
+FEATURE_EXTRACTOR_ARCH = "vgg16"  # Options: "mobilenet", "vgg16"
