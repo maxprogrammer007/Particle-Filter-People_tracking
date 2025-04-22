@@ -1,7 +1,7 @@
 # config.py
 
 USE_DEEP_FEATURES = True
-VIDEO_PATH = "sample_videos/test_video.mp4"
+VIDEO_PATH = "C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\people_tracking_particle_filter\\sample_videos\\test_video.avi"
 OUTPUT_PATH = "output_tracking.avi"
 NSGA_GENERATIONS = 4
 NSGA_POP_SIZE = 6
