@@ -1,0 +1,5 @@
+Best Configuration:
+Particles: 129
+Noise: 1.35
+Patch Size: 22
+Fitness (MOTA, IDSW, FPS): (0.879, 0.0, 0.4895968987626861)
