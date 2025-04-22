@@ -10,6 +10,7 @@ class TrackerManager:
         self.device = device
 
     def update(self, frame, detections):
+        # Add new trackers for new detections
         if len(self.trackers) < len(detections):
             for det in detections[len(self.trackers):]:
                 x, y, w, h = det
@@ -17,14 +18,16 @@ class TrackerManager:
                 patch = frame[y:y + h, x:x + w]
 
                 pf = ParticleFilter(
-                    center,
+                    initial_pos=center,
                     num_particles=self.num_particles,
                     noise=self.noise,
                     patch_size=self.patch_size,
                     device=self.device
                 )
+
                 self.trackers.append((pf, patch))
 
+        # Update all existing trackers
         for pf, target_patch in self.trackers:
             pf.predict()
             pf.update(frame, target_patch, use_deep_features=self.use_deep_features)
