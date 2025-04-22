@@ -4,8 +4,9 @@ import time
 import torch
 import numpy as np
 from evaluation import run_tracking_evaluation
-from config import VIDEO_PATH, NSGA_GENERATIONS, NSGA_POP_SIZE
+from config import VIDEO_PATH, NSGA_GENERATIONS, NSGA_POP_SIZE,FEATURE_EXTRACTOR_ARCH
 from plot_pareto import plot_pareto
+
 
 # Detect device (GPU or CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,7 +37,7 @@ def evaluate(individual):
     motion_noise = float(individual[1])
     patch_size = int(np.clip(round(individual[2]), *PATCH_RANGE))
 
-    print(f"\n🔍 Evaluating: Particles={num_particles}, Noise={motion_noise:.2f}, Patch={patch_size}")
+    print(f"\n🔍 Evaluating: Particles={num_particles}, Noise={motion_noise:.2f}, Patch={patch_size},Model={FEATURE_EXTRACTOR_ARCH}")
     start = time.time()
 
     mota, id_switches, fps = run_tracking_evaluation(
