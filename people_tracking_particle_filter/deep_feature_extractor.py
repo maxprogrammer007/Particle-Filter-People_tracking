@@ -7,6 +7,7 @@ from torchvision.models import (
     mobilenet_v2, vgg16, densenet121,
     MobileNet_V2_Weights, VGG16_Weights, DenseNet121_Weights
 )
+from torchvision.models import efficientnet_b0, EfficientNet_B0_Weights
 
 # Select device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,6 +39,13 @@ def load_model(architecture: str = FEATURE_EXTRACTOR_ARCH):
         model = densenet121(weights=weights).features.to(device).eval()
         preprocess = weights.transforms()
         feature_dim = 1024  # DenseNet121 has 1024 output features
+        
+    elif architecture.lower() == "efficientnet":
+        weights = EfficientNet_B0_Weights.DEFAULT
+        model = efficientnet_b0(weights=weights).features.to(device).eval()
+        preprocess = weights.transforms()
+        feature_dim = 1280
+
 
     else:
         raise ValueError(f"Unsupported architecture: {architecture}")
