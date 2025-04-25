@@ -4,13 +4,16 @@ import time
 import torch
 import numpy as np
 from evaluation import run_tracking_evaluation
-from config import VIDEO_PATH, NSGA_GENERATIONS, NSGA_POP_SIZE,FEATURE_EXTRACTOR_ARCH
+from config import VIDEO_PATH, NSGA_GENERATIONS, NSGA_POP_SIZE, FEATURE_EXTRACTOR_ARCH
 from plot_pareto import plot_pareto
-
+from deep_feature_extractor import load_model  # ✅ Load model architecture once
 
 # Detect device (GPU or CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"[INFO] NSGA-II is running on device: {device}")
+
+# ✅ Load the selected feature extractor model before evaluation starts
+load_model(FEATURE_EXTRACTOR_ARCH)
 
 # --- DEAP setup ---
 creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0, 1.0))  # MOTA ↑, IDSW ↓, FPS ↑
@@ -37,7 +40,7 @@ def evaluate(individual):
     motion_noise = float(individual[1])
     patch_size = int(np.clip(round(individual[2]), *PATCH_RANGE))
 
-    print(f"\n🔍 Evaluating: Particles={num_particles}, Noise={motion_noise:.2f}, Patch={patch_size},Model={FEATURE_EXTRACTOR_ARCH}")
+    print(f"\n🔍 Evaluating: Particles={num_particles}, Noise={motion_noise:.2f}, Patch={patch_size}, Model={FEATURE_EXTRACTOR_ARCH}")
     start = time.time()
 
     mota, id_switches, fps = run_tracking_evaluation(
@@ -45,8 +48,7 @@ def evaluate(individual):
         num_particles=num_particles,
         motion_noise=motion_noise,
         patch_size=patch_size,
-        max_frames=100,
-          # 👈 GPU-enabled
+        max_frames=100
     )
 
     elapsed = time.time() - start
