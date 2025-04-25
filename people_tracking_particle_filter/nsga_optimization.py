@@ -6,13 +6,13 @@ import numpy as np
 from evaluation import run_tracking_evaluation
 from config import VIDEO_PATH, NSGA_GENERATIONS, NSGA_POP_SIZE, FEATURE_EXTRACTOR_ARCH
 from plot_pareto import plot_pareto
-from deep_feature_extractor import load_model  # ✅ Load model architecture once
+from deep_feature_extractor import load_model  # ✅ Import model loader
 
 # Detect device (GPU or CPU)
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"[INFO] NSGA-II is running on device: {device}")
 
-# ✅ Load the selected feature extractor model before evaluation starts
+# ✅ Load the selected deep model before optimization begins
 load_model(FEATURE_EXTRACTOR_ARCH)
 
 # --- DEAP setup ---
@@ -90,4 +90,4 @@ def run_nsga(generations=NSGA_GENERATIONS, pop_size=NSGA_POP_SIZE):
     return pop, log, hof
 
 if __name__ == "__main__":
-    run_nsga(generations=2, pop_size=4)  # for testing fast mode
+    run_nsga(generations=2, pop_size=4)  # Fast mode for testing
