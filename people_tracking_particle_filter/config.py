@@ -1,7 +1,7 @@
 # config.py
 
 USE_DEEP_FEATURES = True
-VIDEO_PATH = "sample_videos/test_video.mp4"
+VIDEO_PATH = "C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\people_tracking_particle_filter\\sample_videos\\test_video.mp4"
 OUTPUT_PATH = "output_tracking.avi"
 NSGA_GENERATIONS = 4
 NSGA_POP_SIZE = 6
@@ -34,3 +34,9 @@ params = load_best_config()
 NUM_PARTICLES = params["NUM_PARTICLES"]
 MOTION_NOISE = params["MOTION_NOISE"]
 PATCH_SIZE = params["PATCH_SIZE"]
+
+
+# Parameter ranges for optimization
+PARTICLE_RANGE = (30, 150)
+NOISE_RANGE = (1.0, 10.0)
+PATCH_RANGE = (10, 40)
