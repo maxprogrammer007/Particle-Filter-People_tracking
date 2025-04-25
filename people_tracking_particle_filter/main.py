@@ -3,7 +3,7 @@ import torch
 from blob_detection import detect_blobs
 from tracker_manager import TrackerManager
 from utils import draw_particles, draw_tracking
-from deep_feature_extractor import load_model  # ✅ Import model loader
+from deep_feature_extractor import load_model
 from config import (
     NUM_PARTICLES,
     MOTION_NOISE,
@@ -11,16 +11,15 @@ from config import (
     USE_DEEP_FEATURES,
     VIDEO_PATH,
     OUTPUT_PATH,
-    FEATURE_EXTRACTOR_ARCH  # ✅ Add this to config.py
+    FEATURE_EXTRACTOR_ARCH
 )
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] Running on: {device}")
 
-    # ✅ Load selected feature extractor (MobileNet or VGG)
     if USE_DEEP_FEATURES:
-        load_model(FEATURE_EXTRACTOR_ARCH)
+        load_model(FEATURE_EXTRACTOR_ARCH)  # Load selected architecture (mobilenet/vgg16/densenet/efficientnet)
 
     cap = cv2.VideoCapture(VIDEO_PATH)
     if not cap.isOpened():
