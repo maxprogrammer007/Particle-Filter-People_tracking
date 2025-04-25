@@ -4,8 +4,8 @@ import cv2
 from PIL import Image
 from config import FEATURE_EXTRACTOR_ARCH
 from torchvision.models import (
-    mobilenet_v2, vgg16,
-    MobileNet_V2_Weights, VGG16_Weights
+    mobilenet_v2, vgg16, densenet121,
+    MobileNet_V2_Weights, VGG16_Weights, DenseNet121_Weights
 )
 
 # Select device
@@ -32,6 +32,12 @@ def load_model(architecture: str = FEATURE_EXTRACTOR_ARCH):
         model = vgg16(weights=weights).features.to(device).eval()
         preprocess = weights.transforms()
         feature_dim = 512
+        
+    elif architecture.lower() == "densenet121":
+        weights = DenseNet121_Weights.DEFAULT
+        model = densenet121(weights=weights).features.to(device).eval()
+        preprocess = weights.transforms()
+        feature_dim = 1024  # DenseNet121 has 1024 output features
 
     else:
         raise ValueError(f"Unsupported architecture: {architecture}")
