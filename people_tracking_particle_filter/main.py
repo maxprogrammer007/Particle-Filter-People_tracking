@@ -2,7 +2,7 @@ import cv2
 import torch
 from blob_detection import detect_blobs
 from tracker_manager import TrackerManager
-from utils import draw_particles, draw_tracking
+from old_utils import draw_particles, draw_tracking
 from config import (
     NUM_PARTICLES,
     MOTION_NOISE,

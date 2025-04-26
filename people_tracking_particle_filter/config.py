@@ -36,7 +36,6 @@ MOTION_NOISE = params["MOTION_NOISE"]
 PATCH_SIZE = params["PATCH_SIZE"]
 
 
-# Parameter ranges for optimization
-PARTICLE_RANGE = (30, 150)
-NOISE_RANGE = (1.0, 10.0)
-PATCH_RANGE = (10, 40)
+PARTICLE_RANGE = (150, 200)  # was (30, 150) earlier
+NOISE_RANGE = (3.0, 5.0)     # was (1.0, 10.0) earlier
+PATCH_RANGE = (10, 20)       # was (10, 40) earlier

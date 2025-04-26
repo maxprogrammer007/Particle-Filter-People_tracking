@@ -1,27 +1,26 @@
-import cv2
+# blob_detection.py
+import torch
+from ultralytics import YOLO
 
-# Create the HOG person detector once
-hog = cv2.HOGDescriptor()
-hog.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+# ✅ Load YOLOv8n (Nano) model once
+model = YOLO('yolov8n.pt')  # This will download/load YOLOv8 nano model
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device).eval()
 
 def detect_blobs(frame):
-    # Resize frame to improve detection speed and accuracy
-    frame_resized = cv2.resize(frame, (640, 480))
-    
-    # Detect people
-    rects, _ = hog.detectMultiScale(frame_resized, winStride=(8,8))
-    
-    # Adjust coordinates back to original frame size
-    scale_x = frame.shape[1] / 640
-    scale_y = frame.shape[0] / 480
+    """Detect humans using YOLOv8n."""
+    results = model.predict(source=frame, device=device.index if device.type == 'cuda' else 'cpu', verbose=False)
+
     detections = []
-    
-    for (x, y, w, h) in rects:
-        detections.append((
-            int(x * scale_x),
-            int(y * scale_y),
-            int(w * scale_x),
-            int(h * scale_y)
-        ))
-    
+    for r in results:
+        for box, cls in zip(r.boxes.xyxy, r.boxes.cls):
+            if int(cls) == 0:  # Class 0 = 'person' for COCO
+                x1, y1, x2, y2 = box
+                detections.append((
+                    int(x1.item()),
+                    int(y1.item()),
+                    int((x2 - x1).item()),
+                    int((y2 - y1).item())
+                ))
+
     return detections
