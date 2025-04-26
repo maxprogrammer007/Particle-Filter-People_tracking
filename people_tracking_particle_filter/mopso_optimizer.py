@@ -9,7 +9,7 @@ from config import VIDEO_PATH, PARTICLE_RANGE, NOISE_RANGE, PATCH_RANGE
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"[INFO] MOPSO running on device: {device}")
 
-# DEAP setup
+# --- DEAP Setup ---
 creator.create("FitnessMulti", base.Fitness, weights=(1.0, -1.0, 1.0))  # MOTA↑, IDSW↓, FPS↑
 creator.create("Particle", list, fitness=creator.FitnessMulti)
 
@@ -38,36 +38,38 @@ toolbox.register("particle", tools.initIterate, creator.Particle, random_positio
 toolbox.register("population", tools.initRepeat, list, toolbox.particle)
 
 def evaluate(ind):
+    ind = clip_position(ind)
     start = time.time()
     mota, idsw, fps = run_tracking_evaluation(
         VIDEO_PATH, ind[0], ind[1], ind[2], max_frames=100
     )
-    print(f"✅ [MOPSO] Eval -> MOTA={mota:.3f}, IDSW={idsw}, FPS={fps:.2f} | Time: {time.time() - start:.1f}s")
+    print(f"✅ [MOPSO] Eval -> MOTA={mota:.3f}, IDSW={idsw}, FPS={fps:.2f} | Time: {time.time()-start:.1f}s")
     return mota, idsw, fps
 
 toolbox.register("evaluate", evaluate)
 
 def crowding_sort(archive, k):
     fronts = tools.sortNondominated(archive, len(archive), first_front_only=True)
-    return tools.selNSGA2(fronts[0], k) if len(fronts[0]) > k else fronts[0]
+    if len(fronts[0]) > k:
+        return tools.selNSGA2(fronts[0], k)
+    return fronts[0]
 
 def run_mopso(pop_size=8, generations=3, inertia=0.5, phi_p=1.5, phi_g=1.5):
     pop = toolbox.population(n=pop_size)
     velocities = [random_velocity() for _ in range(pop_size)]
 
     # Initialize personal bests
-    pbest = [ind[:] for ind in pop]
+    pbest = [creator.Particle(ind) for ind in pop]
     pbest_fit = [toolbox.evaluate(ind) for ind in pbest]
     for ind, fit in zip(pbest, pbest_fit):
         ind.fitness.values = fit
 
-    archive = pbest[:]
-    archive_fit = [ind.fitness.values for ind in archive]
-
-    global_best = max(archive, key=lambda ind: ind.fitness.values[0])
+    archive = [creator.Particle(ind) for ind in pbest]
+    for ind in archive:
+        ind.fitness.values = toolbox.evaluate(ind)
 
     for gen in range(generations):
-        print(f"\n📘 GEN {gen} | Archive Size: {len(archive)}")
+        print(f"\n📘 [GEN {gen}] Archive Size: {len(archive)}")
 
         for i, ind in enumerate(pop):
             leader = random.choice(crowding_sort(archive, k=pop_size))
@@ -75,37 +77,33 @@ def run_mopso(pop_size=8, generations=3, inertia=0.5, phi_p=1.5, phi_g=1.5):
             for d in range(3):
                 r_p, r_g = random.random(), random.random()
                 velocities[i][d] = (
-                    inertia * velocities[i][d]
-                    + phi_p * r_p * (pbest[i][d] - ind[d])
-                    + phi_g * r_g * (leader[d] - ind[d])
+                    inertia * velocities[i][d] +
+                    phi_p * r_p * (pbest[i][d] - ind[d]) +
+                    phi_g * r_g * (leader[d] - ind[d])
                 )
                 velocities[i][d] = np.clip(velocities[i][d], -10, 10)
                 ind[d] += velocities[i][d]
 
-            # Clip and reassign to preserve fitness object
-            clipped = clip_position(ind)
-            ind[:] = clipped
+            ind[:] = clip_position(ind)
 
             fit = toolbox.evaluate(ind)
             ind.fitness.values = fit
 
-            # Personal best update
+            # Update personal best
             if fit[0] > pbest_fit[i][0]:
-                pbest[i] = ind[:]
+                pbest[i] = creator.Particle(ind)
+                pbest[i].fitness.values = fit
                 pbest_fit[i] = fit
 
-            # Archive update
-            archive.append(ind[:])
+            # Update archive
+            arch_copy = creator.Particle(ind)
+            arch_copy.fitness.values = fit
+            archive.append(arch_copy)
 
-        # Prune using non-dominated sorting and crowding distance
+        # Archive pruning using Pareto sorting
         archive = crowding_sort(archive, k=pop_size)
 
-        # Track current global best
-        current_best = max(archive, key=lambda ind: ind.fitness.values[0])
-        if current_best.fitness.values[0] > global_best.fitness.values[0]:
-            global_best = current_best
+    best = max(archive, key=lambda ind: ind.fitness.values[0])
+    print(f"\n🏆 [FINAL MOPSO BEST] {best}, Fitness: {best.fitness.values}")
+    return best, best.fitness.values
 
-        print(f"📊 Best So Far: MOTA={global_best.fitness.values[0]:.3f}, FPS={global_best.fitness.values[2]:.2f}")
-
-    print(f"\n🏆 FINAL MOPSO BEST: {global_best}, Fitness: {global_best.fitness.values}")
-    return global_best, global_best.fitness.values
