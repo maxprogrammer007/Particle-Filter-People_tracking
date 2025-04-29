@@ -58,8 +58,10 @@ print("[INFO] Setting up SHAP GradientExplainer...")
 explainer = shap.GradientExplainer(model, background)
 
 print("[INFO] Computing SHAP values...")
-with torch.no_grad():
-    shap_values, _ = explainer.shap_values(test_samples, ranked_outputs=1)
+test_samples.requires_grad = True  # 👈 Enable gradient tracking
+
+shap_values, _ = explainer.shap_values(test_samples, ranked_outputs=1)
+
 
 print(f"[DEBUG] shap_values original shape: {shap_values.shape}")
 
@@ -85,7 +87,7 @@ test_samples_denorm = torch.stack([inv_normalize(x.cpu()) for x in test_samples]
 
 # Convert to (H, W, C)
 images_to_plot = np.clip(
-    np.array([img.numpy().transpose(1, 2, 0) for img in test_samples_denorm]),
+    np.array([img.detach().numpy().transpose(1, 2, 0) for img in test_samples_denorm]),
     0.0, 1.0
 )
 
