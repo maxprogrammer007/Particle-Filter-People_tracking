@@ -6,45 +6,50 @@ from torchvision.models import shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
 from torchvision import transforms
 import os
 
-# Global device (CPU or CUDA)
+# Global device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# Check if fine-tuned model exists
-FINETUNED_PATH = "C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\shufflenetv2_finetuned.pth"
+# Path to optional fine-tuned model
+FINETUNED_PATH = "mobilenetv2_finetuned.pth"  # (you can rename this to shufflenet_finetuned.pth if applicable)
 
-# Preprocessing
+# Load ShuffleNetV2
 weights = ShuffleNet_V2_X1_0_Weights.DEFAULT
 preprocess = weights.transforms()
 
-# Define scalar-output model if needed
-class ScalarShuffleNetV2(torch.nn.Module):
-    def __init__(self):
+cclass FeatureExtractor(torch.nn.Module):
+    def __init__(self, pretrained=True, finetuned_path=None, device_type="cuda"):
         super().__init__()
-        self.backbone = shufflenet_v2_x1_0(weights=None)
-        self.features = self.backbone.features
-        self.pool = torch.nn.AdaptiveAvgPool2d((1, 1))
-        self.out_dim = 1024  # ShuffleNetV2 final feature dim
+        base = shufflenet_v2_x1_0(weights=weights if pretrained else None)
+        self.backbone = torch.nn.Sequential(
+            base.conv1,
+            base.maxpool,
+            base.stage2,
+            base.stage3,
+            base.stage4,
+            base.conv5
+        )
+        if finetuned_path and os.path.exists(finetuned_path):
+            print("[INFO] Loading fine-tuned ShuffleNetV2 weights...")
+            state_dict = torch.load(finetuned_path, map_location=device)
+            base.load_state_dict(state_dict, strict=False)
+
+        self.device_type = device_type
+        self.backbone.to(device).eval()
 
     def forward(self, x):
-        x = self.features(x)
-        return x  # feature map only
+        with torch.amp.autocast(device_type=self.device_type):
+            return self.backbone(x)
 
-# Load the correct model
-if os.path.exists(FINETUNED_PATH):
-    print("[INFO] Loading Fine-Tuned ShuffleNetV2 for feature extraction...")
-    model = ScalarShuffleNetV2().to(device)
-    state_dict = torch.load(FINETUNED_PATH, map_location=device)
-    model.load_state_dict(state_dict, strict=False)
-    model = model.features.eval()
-else:
-    print("[INFO] Using default ShuffleNetV2 features (ImageNet pretrained)")
-    model = shufflenet_v2_x1_0(weights=weights).features.to(device).eval()
+
+    
+# TorchScript Compilation for performance
+model = FeatureExtractor(pretrained=True, finetuned_path=None)
+model.eval()
+model = torch.jit.script(model)
 
 @torch.no_grad()
+@torch.cuda.amp.autocast()
 def extract_deep_feature(patch):
-    """
-    Extract normalized 1024-d feature vector from a single image patch.
-    """
     if patch is None or patch.size == 0:
         return torch.zeros(1024, device=device)
 
@@ -57,10 +62,8 @@ def extract_deep_feature(patch):
     return F.normalize(pooled, dim=0)
 
 @torch.no_grad()
+@torch.cuda.amp.autocast()
 def extract_batch_features(patch_list):
-    """
-    Batch extract features for a list of patches.
-    """
     valid = [p for p in patch_list if p is not None and p.size > 0]
     if not valid:
         return torch.zeros((0, 1024), device=device)
