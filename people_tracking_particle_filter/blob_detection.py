@@ -9,7 +9,15 @@ model.to(device).eval()
 
 def detect_blobs(frame):
     """Detect humans using YOLOv8n."""
-    results = model.predict(source=frame, device=device.index if device.type == 'cuda' else 'cpu', verbose=False)
+    results = model.predict(
+    source=frame,
+    conf=0.4,           # ⬆️ Slightly more confident
+    iou=0.4,
+    max_det=3,          # ⬇️ track fewer people per frame
+    device=device.index if device.type == 'cuda' else 'cpu',
+    verbose=False
+)
+
 
     detections = []
     for r in results:
