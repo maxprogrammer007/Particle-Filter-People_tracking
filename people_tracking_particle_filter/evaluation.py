@@ -32,7 +32,7 @@ def run_tracking_evaluation(video_path, num_particles=75, motion_noise=5.0, patc
             break
 
         # Optional: resize to 224x224 to speed up deep inference
-        frame = cv2.resize(frame, (224, 224))
+        frame = cv2.resize(frame, (160, 160))
 
         start_time = time.time()
         blobs = detect_blobs(frame)
