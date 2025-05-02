@@ -1,3 +1,4 @@
+import os                # <<< for path handling
 import cv2
 import torch
 from blob_detection import detect_blobs
@@ -12,9 +13,28 @@ from config import (
     OUTPUT_PATH
 )
 
+# ---- NEW TRT imports ----
+import tensorrt as trt            # <<< 
+from tensorrt_utils import (      # <<<
+    load_engine, 
+    allocate_buffers, 
+    do_inference
+)
+
+# point this at wherever you built/saved your .trt
+TRT_ENGINE_PATH = r"C:\Users\abhin\OneDrive\Documents\GitHub\Particle-Filter-People_tracking\feat_extractor.trt"  # <<<
+
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[INFO] Running on: {device}")
+
+    # ---- NEW: build TRT runtime + engine + buffers ----
+    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
+    runtime     = trt.Runtime(TRT_LOGGER)
+    engine      = load_engine(runtime, TRT_ENGINE_PATH)
+    inputs, outputs, bindings, stream = allocate_buffers(engine)
+    context     = engine.create_execution_context()
+    print(f"[INFO] Loaded TRT engine from {TRT_ENGINE_PATH}")
 
     cap = cv2.VideoCapture(VIDEO_PATH)
 
@@ -23,16 +43,25 @@ def main():
         noise=MOTION_NOISE,
         patch_size=PATCH_SIZE,
         use_deep_features=USE_DEEP_FEATURES,
-        device=device  # 👈 Forward device
+        device=device,
+
+        # <<< pass TRT bits into your tracker so it can do feature extraction
+        trt_context = context,
+        trt_bindings = bindings,
+        trt_inputs = inputs,
+        trt_outputs = outputs,
+        trt_stream = stream,
     )
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    out = cv2.VideoWriter(OUTPUT_PATH,
-                          cv2.VideoWriter_fourcc(*'XVID'),
-                          20.0,
-                          (frame_width, frame_height))
+    out = cv2.VideoWriter(
+        OUTPUT_PATH,
+        cv2.VideoWriter_fourcc(*'XVID'),
+        20.0,
+        (frame_width, frame_height)
+    )
 
     while True:
         ret, frame = cap.read()
@@ -41,6 +70,8 @@ def main():
             continue
 
         blobs = detect_blobs(frame)
+        # tracker_manager should internally call do_inference() when
+        # USE_DEEP_FEATURES is True, using the TRT buffers you passed in.
         tracker_manager.update(frame, blobs)
         centers = tracker_manager.get_estimates()
 
