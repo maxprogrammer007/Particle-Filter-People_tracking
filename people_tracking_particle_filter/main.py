@@ -22,7 +22,7 @@ from tensorrt_utils import (      # <<<
 )
 
 # point this at wherever you built/saved your .trt
-TRT_ENGINE_PATH = r"C:\Users\abhin\OneDrive\Documents\GitHub\Particle-Filter-People_tracking\feat_extractor.trt"  # <<<
+TRT_ENGINE_PATH = r"C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\feat_extractor.trt"  # <<<
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
