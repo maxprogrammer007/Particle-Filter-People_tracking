@@ -7,7 +7,7 @@ import pycuda.autoinit  # initializes CUDA driver
 # Helpers to build / load a TRT Engine
 # -----------------------------------------------------------------------------
 
-def load_engine(runtime: trt.IRuntime, engine_path: str) -> trt.ICudaEngine:
+def load_engine(runtime: trt.Runtime, engine_path: str) -> trt.ICudaEngine:
     """Load a serialized TensorRT engine from disk."""
     if not os.path.exists(engine_path):
         raise FileNotFoundError(f"TensorRT engine file not found: {engine_path}")
@@ -34,20 +34,32 @@ def allocate_buffers(engine):
     inputs, outputs, bindings = [], [], []
     stream = cuda.Stream()
 
-    for idx in range(engine.num_bindings):
-        binding = engine.get_binding_dtype(idx)
-        shape   = engine.get_binding_shape(idx)
-        size    = trt.volume(shape)
-        # host array:
-        host_mem = np.empty(size, dtype=trt.nptype(binding))
-        # device buffer:
+    # figure out how many bindings by just trying get_binding_dtype() until it fails
+    nb = 0
+    while True:
+        try:
+            engine.get_binding_dtype(nb)
+        except:
+            break
+        nb += 1
+
+    for idx in range(nb):
+        dtype = engine.get_binding_dtype(idx)
+        shape = engine.get_binding_shape(idx)
+        size  = trt.volume(shape)
+
+        # host array
+        host_mem = np.empty(size, dtype=trt.nptype(dtype))
+        # device buffer
         dev_mem  = cuda.mem_alloc(host_mem.nbytes)
-        # append the appropriate list
+
         if engine.binding_is_input(idx):
             inputs.append({'host': host_mem, 'device': dev_mem})
         else:
             outputs.append({'host': host_mem, 'device': dev_mem})
+
         bindings.append(int(dev_mem))
+
     return inputs, outputs, bindings, stream
 
 
