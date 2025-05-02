@@ -3,12 +3,11 @@ import torch.nn.functional as F
 import cv2
 from PIL import Image
 from torchvision.models import shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
-from torchvision import transforms
 import os
 
 # ------------------ Config ------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-FINETUNED_PATH = "shufflenet_finetuned.pth"  # Replace if fine-tuned
+FINETUNED_PATH = "shufflenet_finetuned.pth"  # Replace if you have a fine-tuned file
 
 # ------------------ Load Model ------------------
 weights = ShuffleNet_V2_X1_0_Weights.DEFAULT
@@ -33,13 +32,13 @@ class FeatureExtractor(torch.nn.Module):
         self.backbone.to(device).eval()
 
     def forward(self, x):
-        with torch.amp.autocast(device_type="cuda"):
+        # hard-code to CUDA autocast; if on CPU this just falls back
+        with torch.amp.autocast("cuda"):
             return self.backbone(x)
 
-# Optional TorchScript (comment out if debugging)
-model = FeatureExtractor(pretrained=True, finetuned_path=None)
+# instantiate but do NOT torch.jit.script at import time
+model = FeatureExtractor(pretrained=True, finetuned_path=None).to(device)
 model.eval()
-model = torch.jit.script(model)
 
 # ------------------ Feature Extraction ------------------
 @torch.no_grad()
@@ -47,12 +46,13 @@ def extract_deep_feature(patch):
     if patch is None or patch.size == 0:
         return torch.zeros(1024, device=device)
 
+    # preprocess
     patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(patch_rgb)
-    tensor = preprocess(pil_img).unsqueeze(0).to(device)
+    inp = preprocess(pil_img).unsqueeze(0).to(device)
 
-    with torch.amp.autocast(device_type="cuda"):
-        fmap = model(tensor)
+    with torch.amp.autocast("cuda"):
+        fmap = model(inp)
 
     pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).view(-1)
     return F.normalize(pooled, dim=0)
@@ -63,17 +63,15 @@ def extract_batch_features(patch_list):
     if not valid:
         return torch.zeros((0, 1024), device=device)
 
-    batch = []
+    tensors = []
     for patch in valid:
         patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(patch_rgb)
-        tensor = preprocess(pil_img)
-        batch.append(tensor)
+        tensors.append(preprocess(pil_img))
 
-    batch_tensor = torch.stack(batch).to(device)
-
-    with torch.amp.autocast(device_type="cuda"):
-        fmap = model(batch_tensor)
+    batch = torch.stack(tensors).to(device)
+    with torch.amp.autocast("cuda"):
+        fmap = model(batch)
 
     pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).squeeze(-1).squeeze(-1)
     return F.normalize(pooled, p=2, dim=1)
