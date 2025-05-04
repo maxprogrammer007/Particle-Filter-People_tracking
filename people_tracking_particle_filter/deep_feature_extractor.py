@@ -1,77 +1,65 @@
-import torch
-import torch.nn.functional as F
-import cv2
-from PIL import Image
-from torchvision.models import shufflenet_v2_x1_0, ShuffleNet_V2_X1_0_Weights
-import os
+# tracker_manager.py
 
-# ------------------ Config ------------------
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-FINETUNED_PATH = "shufflenet_finetuned.pth"  # Replace if you have a fine-tuned file
+from particle_filter import ParticleFilter
 
-# ------------------ Load Model ------------------
-weights = ShuffleNet_V2_X1_0_Weights.DEFAULT
-preprocess = weights.transforms()
+class TrackerManager:
+    def __init__(
+        self,
+        num_particles=75,
+        noise=5.0,
+        patch_size=20,
+        use_deep_features=True,
+        device=None,
+        # <<< NEW: accept these five TRT-related objects
+        trt_context=None,
+        trt_bindings=None,
+        trt_inputs=None,
+        trt_outputs=None,
+        trt_stream=None
+    ):
+        self.trackers = []
+        self.num_particles       = num_particles
+        self.noise               = noise
+        self.patch_size          = patch_size
+        self.use_deep_features   = use_deep_features
+        self.device              = device
 
-class FeatureExtractor(torch.nn.Module):
-    def __init__(self, pretrained=True, finetuned_path=None):
-        super().__init__()
-        base = shufflenet_v2_x1_0(weights=weights if pretrained else None)
-        self.backbone = torch.nn.Sequential(
-            base.conv1,
-            base.maxpool,
-            base.stage2,
-            base.stage3,
-            base.stage4,
-            base.conv5
-        )
-        if finetuned_path and os.path.exists(finetuned_path):
-            print("[INFO] Loading fine-tuned weights...")
-            state_dict = torch.load(finetuned_path, map_location=device)
-            base.load_state_dict(state_dict, strict=False)
-        self.backbone.to(device).eval()
+        # <<< STORE the TRT objects on self for later
+        self.trt_context  = trt_context
+        self.trt_bindings = trt_bindings
+        self.trt_inputs   = trt_inputs
+        self.trt_outputs  = trt_outputs
+        self.trt_stream   = trt_stream
 
-    def forward(self, x):
-        # hard-code to CUDA autocast; if on CPU this just falls back
-        with torch.amp.autocast("cuda"):
-            return self.backbone(x)
+    def update(self, frame, detections):
+        # if more detections than existing trackers, spawn new PFs
+        if len(self.trackers) < len(detections):
+            for det in detections[len(self.trackers):]:
+                x, y, w, h = det
+                center = (x + w // 2, y + h // 2)
+                patch  = frame[y : y + h, x : x + w]
 
-# instantiate but do NOT torch.jit.script at import time
-model = FeatureExtractor(pretrained=True, finetuned_path=None).to(device)
-model.eval()
+                # <<< Pass all TRT bits into every new PF
+                pf = ParticleFilter(
+                    center,
+                    num_particles      = self.num_particles,
+                    noise              = self.noise,
+                    patch_size         = self.patch_size,
+                    device             = self.device,
+                    use_deep_features  = self.use_deep_features,
+                    # TRT args:
+                    trt_context  = self.trt_context,
+                    trt_bindings = self.trt_bindings,
+                    trt_inputs   = self.trt_inputs,
+                    trt_outputs  = self.trt_outputs,
+                    trt_stream   = self.trt_stream,
+                )
+                self.trackers.append((pf, patch))
 
-# ------------------ Feature Extraction ------------------
-@torch.no_grad()
-def extract_deep_feature(patch):
-    if patch is None or patch.size == 0:
-        return torch.zeros(1024, device=device)
+        # then for every existing PF, do predict + update
+        for pf, target_patch in self.trackers:
+            pf.predict()
+            pf.update(frame, target_patch)
 
-    # preprocess
-    patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-    pil_img = Image.fromarray(patch_rgb)
-    inp = preprocess(pil_img).unsqueeze(0).to(device)
-
-    with torch.amp.autocast("cuda"):
-        fmap = model(inp)
-
-    pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).view(-1)
-    return F.normalize(pooled, dim=0)
-
-@torch.no_grad()
-def extract_batch_features(patch_list):
-    valid = [p for p in patch_list if p is not None and p.size > 0]
-    if not valid:
-        return torch.zeros((0, 1024), device=device)
-
-    tensors = []
-    for patch in valid:
-        patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(patch_rgb)
-        tensors.append(preprocess(pil_img))
-
-    batch = torch.stack(tensors).to(device)
-    with torch.amp.autocast("cuda"):
-        fmap = model(batch)
-
-    pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).squeeze(-1).squeeze(-1)
-    return F.normalize(pooled, p=2, dim=1)
+    def get_estimates(self):
+        return [pf.estimate() for pf, _ in self.trackers]
