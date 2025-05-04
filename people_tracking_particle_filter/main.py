@@ -9,7 +9,8 @@ from config import (
     PATCH_SIZE,
     USE_DEEP_FEATURES,
     VIDEO_PATH,
-    OUTPUT_PATH
+    OUTPUT_PATH,
+    DETECTION_INTERVAL,  # new
 )
 
 def main():
@@ -23,27 +24,37 @@ def main():
         noise=MOTION_NOISE,
         patch_size=PATCH_SIZE,
         use_deep_features=USE_DEEP_FEATURES,
-        device=device  # 👈 Forward device
+        device=device
     )
 
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-    out = cv2.VideoWriter(OUTPUT_PATH,
-                          cv2.VideoWriter_fourcc(*'XVID'),
-                          20.0,
-                          (frame_width, frame_height))
+    out = cv2.VideoWriter(
+        OUTPUT_PATH,
+        cv2.VideoWriter_fourcc(*'XVID'),
+        20.0,
+        (frame_width, frame_height)
+    )
 
+    frame_id = 0
     while True:
         ret, frame = cap.read()
         if not ret:
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            frame_id = 0
             continue
 
-        blobs = detect_blobs(frame)
+        # ─── Detection Stride ───────────────────────────────────────────────
+        if frame_id % DETECTION_INTERVAL == 0:
+            blobs = detect_blobs(frame)
+        else:
+            blobs = []  # skip detection; only predict
+
         tracker_manager.update(frame, blobs)
         centers = tracker_manager.get_estimates()
 
+        # ─── Draw ───────────────────────────────────────────────────────────
         for pf, _ in tracker_manager.trackers:
             draw_particles(frame, pf.particles)
         draw_tracking(frame, centers)
@@ -54,9 +65,12 @@ def main():
         if cv2.waitKey(30) & 0xFF == 27:
             break
 
+        frame_id += 1
+
     cap.release()
     out.release()
     cv2.destroyAllWindows()
+
 
 if __name__ == "__main__":
     main()
