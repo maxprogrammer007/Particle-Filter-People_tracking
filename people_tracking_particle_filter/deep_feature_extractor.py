@@ -8,72 +8,57 @@ import os
 
 # ------------------ Config ------------------
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-FINETUNED_PATH = "shufflenet_finetuned.pth"  # Replace if fine-tuned
+FINETUNED_PATH = "shufflenet_finetuned.pth"  # Replace if you have a fine-tuned checkpoint
+FP16 = True  # Set to False if you want full precision
 
 # ------------------ Load Model ------------------
 weights = ShuffleNet_V2_X1_0_Weights.DEFAULT
 preprocess = weights.transforms()
 
-class FeatureExtractor(torch.nn.Module):
-    def __init__(self, pretrained=True, finetuned_path=None):
-        super().__init__()
-        base = shufflenet_v2_x1_0(weights=weights if pretrained else None)
-        self.backbone = torch.nn.Sequential(
-            base.conv1,
-            base.maxpool,
-            base.stage2,
-            base.stage3,
-            base.stage4,
-            base.conv5
-        )
-        if finetuned_path and os.path.exists(finetuned_path):
-            print("[INFO] Loading fine-tuned weights...")
-            state_dict = torch.load(finetuned_path, map_location=device)
-            base.load_state_dict(state_dict, strict=False)
-        self.backbone.to(device).eval()
+# Build feature backbone
+_base = shufflenet_v2_x1_0(weights=weights)
+_model = torch.nn.Sequential(
+    _base.conv1,
+    _base.maxpool,
+    _base.stage2,
+    _base.stage3,
+    _base.stage4,
+    _base.conv5
+)
+# Load fine-tuned weights if available
+if os.path.exists(FINETUNED_PATH):
+    print("[INFO] Loading fine-tuned weights...")
+    state_dict = torch.load(FINETUNED_PATH, map_location=device)
+    _model.load_state_dict(state_dict, strict=False)
 
-    def forward(self, x):
-        with torch.amp.autocast(device_type="cuda"):
-            return self.backbone(x)
-
-# Optional TorchScript (comment out if debugging)
-model = FeatureExtractor(pretrained=True, finetuned_path=None)
-model.eval()
-model = torch.jit.script(model)
-
-# ------------------ Feature Extraction ------------------
-@torch.no_grad()
-def extract_deep_feature(patch):
-    if patch is None or patch.size == 0:
-        return torch.zeros(1024, device=device)
-
-    patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-    pil_img = Image.fromarray(patch_rgb)
-    tensor = preprocess(pil_img).unsqueeze(0).to(device)
-
-    with torch.amp.autocast(device_type="cuda"):
-        fmap = model(tensor)
-
-    pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).view(-1)
-    return F.normalize(pooled, dim=0)
+_model = _model.to(device).eval()
 
 @torch.no_grad()
-def extract_batch_features(patch_list):
-    valid = [p for p in patch_list if p is not None and p.size > 0]
-    if not valid:
+def extract_features(patch_list):
+    """
+    Given a list of OpenCV BGR patches, returns a tensor of shape [N, 1024],
+    where N = number of valid patches. Uses FP16 if enabled.
+    """
+    # Filter out empty patches
+    valid_patches = [p for p in patch_list if p is not None and p.size != 0]
+    if not valid_patches:
         return torch.zeros((0, 1024), device=device)
 
-    batch = []
-    for patch in valid:
-        patch_rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
-        pil_img = Image.fromarray(patch_rgb)
-        tensor = preprocess(pil_img)
-        batch.append(tensor)
+    # Preprocess all crops into a single batched tensor
+    tensors = []
+    for patch in valid_patches:
+        rgb = cv2.cvtColor(patch, cv2.COLOR_BGR2RGB)
+        pil = Image.fromarray(rgb)
+        t = preprocess(pil)  # [C,H,W]
+        tensors.append(t)
+    batch = torch.stack(tensors, dim=0).to(device)  # [N,C,H,W]
 
-    batch_tensor = torch.stack(batch).to(device)
+    # Forward pass in FP16 or FP32
+    with torch.amp.autocast(device_type="cuda", enabled=FP16):
+        fmap = _model(batch)  # [N, feature_map_channels, h, w]
 
-    with torch.amp.autocast(device_type="cuda"):
-        fmap = model(batch_tensor)
-
-    pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).squeeze(-1).squeeze(-1)
-    return F.normalize(pooled, p=2, dim=1)
+    # Global average pool to [N, C]
+    pooled = F.adaptive_avg_pool2d(fmap, (1, 1)).view(fmap.size(0), -1)
+    # L2-normalize along the channel dimension
+    feats = F.normalize(pooled, p=2, dim=1)
+    return feats  # [N, 1024]
