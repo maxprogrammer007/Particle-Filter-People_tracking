@@ -5,71 +5,39 @@ from particle_filter import ParticleFilter
 class TrackerManager:
     def __init__(
         self,
-        num_particles=75,
-        noise=5.0,
-        patch_size=20,
-        use_deep_features=True,
-        device=None,
-        # <<< NEW: accept these five TRT-related objects
-        trt_context=None,
-        trt_bindings=None,
-        trt_inputs=None,
-        trt_outputs=None,
-        trt_stream=None
+        num_particles,
+        noise,
+        patch_size,
+        use_deep_features,
+        device,
+        trt_context, trt_bindings, trt_inputs, trt_outputs, trt_stream
     ):
         self.trackers = []
-        self.num_particles       = num_particles
-        self.noise               = noise
-        self.patch_size          = patch_size
-        self.use_deep_features   = use_deep_features
-        self.device              = device
+        self.params   = dict(
+            num_particles=num_particles,
+            noise=noise,
+            patch_size=patch_size,
+            use_deep_features=use_deep_features,
+            device=device,
+            trt_context=trt_context,
+            trt_bindings=trt_bindings,
+            trt_inputs=trt_inputs,
+            trt_outputs=trt_outputs,
+            trt_stream=trt_stream
+        )
 
-        # <<< STORE the TRT objects on self for later
-        self.trt_context  = trt_context
-        self.trt_bindings = trt_bindings
-        self.trt_inputs   = trt_inputs
-        self.trt_outputs  = trt_outputs
-        self.trt_stream   = trt_stream
+    def update(self, frame, blobs, target_patch):
+        # spawn new PFs if new blobs appear
+        while len(self.trackers) < len(blobs):
+            pos = blobs[len(self.trackers)][:2]
+            pf  = ParticleFilter(initial_pos=pos, **self.params)
+            self.trackers.append(pf)
 
-    def update(self, frame, detections):
-        # If more detections than existing trackers, spawn new PFs:
-        if len(self.trackers) < len(detections):
-            for det in detections[len(self.trackers):]:
-                x, y, w, h = det
-                center = (x + w // 2, y + h // 2)
-                patch  = frame[y : y + h, x : x + w]
-
-                # <<< Pass the TRT objects into every new PF:
-                pf = ParticleFilter(
-                    center,
-                    num_particles      = self.num_particles,
-                    noise              = self.noise,
-                    patch_size         = self.patch_size,
-                    device             = self.device,
-                    use_deep_features  = self.use_deep_features,
-                    # NEW TRT args:
-                    trt_context  = self.trt_context,
-                    trt_bindings = self.trt_bindings,
-                    trt_inputs   = self.trt_inputs,
-                    trt_outputs  = self.trt_outputs,
-                    trt_stream   = self.trt_stream,
-                )
-                self.trackers.append((pf, patch))
-
-        # Then for every existing PF, do a predict + update step:
-        for pf, target_patch in self.trackers:
+        # update all trackers (all use GPU under the hood)
+        for pf in self.trackers:
             pf.predict()
-            # Inside pf.update() you can do:
-            # if self.use_deep_features:
-            #    features = do_inference(
-            #       self.trt_context,
-            #       self.trt_bindings,
-            #       self.trt_inputs,
-            #       self.trt_outputs,
-            #       self.trt_stream,
-            #    )[0]
-            #    ...etc...
-            pf.update(frame, target_patch)
+            pf.update(frame, blobs, target_patch)
 
     def get_estimates(self):
-        return [pf.estimate() for pf, _ in self.trackers]
+        # return list of (x,y) per tracker
+        return [pf.estimate() for pf in self.trackers]
