@@ -6,6 +6,9 @@ OUTPUT_PATH = "output_tracking.avi"
 NSGA_GENERATIONS = 4
 NSGA_POP_SIZE = 6
 
+# Detection stride interval (run blob detection every N frames)
+DETECTION_INTERVAL = 2
+
 # Default fallback if best_config.txt not found
 FALLBACK_CONFIG = {
     "NUM_PARTICLES": 75,
@@ -34,7 +37,6 @@ params = load_best_config()
 NUM_PARTICLES = params["NUM_PARTICLES"]
 MOTION_NOISE = params["MOTION_NOISE"]
 PATCH_SIZE = params["PATCH_SIZE"]
-
 
 PARTICLE_RANGE = (150, 200)  # was (30, 150) earlier
 NOISE_RANGE = (3.0, 5.0)     # was (1.0, 10.0) earlier
