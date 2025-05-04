@@ -13,7 +13,7 @@ def main():
     alpha    = qpso_cfg.get("alpha", 0.75)
 
     # 2) Run the optimizer
-    run_qpso(pop_size=pop_size, max_gen=max_gen, alpha=alpha)
+    run_qpso(pop_size=5, max_gen=2, alpha=alpha)
 
 if __name__ == "__main__":
     main()
