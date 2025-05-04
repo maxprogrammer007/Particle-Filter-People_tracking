@@ -1,0 +1,42 @@
+# configs/nsga_config.yaml
+
+# ─── General Inference Settings ────────────────────────────────────────────────
+inference:
+  device: "cuda"               # or "cpu"
+  fp16: true                   # enable half-precision feature extraction
+  detection_interval: 2        # run detector every N frames
+  batch_size: null             # if null, will batch all ROIs each frame
+
+# ─── Detector (YOLOv8n) Settings ──────────────────────────────────────────────
+detector:
+  model_path: "../yolov8n.pt"
+  imgsz: 480                   # try 320, 416, 480
+  conf_thresh: 0.30            # confidence threshold
+  iou_thresh: 0.45             # NMS IoU threshold
+
+# ─── Feature Extractor (ShuffleNetV2) ─────────────────────────────────────────
+feature_extractor:
+  backbone: "shufflenetv2_x1.0"  # name for logging
+  pretrained: "../mobilenetv2_finetuned.pth"  # if using a custom checkpoint
+  output_dim: 1024               # e.g. model’s feature vector size
+
+# ─── Particle Filter Parameters ───────────────────────────────────────────────
+particle_filter:
+  base_particles: 100           # initial particle count
+  noise_scale: 5.0              # process noise setting
+  patch_size: 11                # pixel patch radius (odd number)
+
+# ─── Optimization (NSGA-II) ───────────────────────────────────────────────────
+nsga2:
+  pop_size: 50
+  num_gen: 40
+  objectives:
+    - mota
+    - fps
+    - id_switches
+
+# ─── Logging & Output ─────────────────────────────────────────────────────────
+logging:
+  log_dir: "../logs"
+  save_results: true
+  results_dir: "../data/results"
