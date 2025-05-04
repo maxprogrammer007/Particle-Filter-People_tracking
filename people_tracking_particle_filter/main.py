@@ -1,10 +1,16 @@
-import os                # <<< for path handling
+# main.py
+import os
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 import cv2
 import torch
-from blob_detection import detect_blobs
-from tracker_manager import TrackerManager
-from old_utils import draw_particles, draw_tracking
-from config import (
+import tensorrt as trt
+
+from old_utils        import extract_batch_features
+from blob_detection   import detect_blobs
+from drawing_utils    import draw_particles, draw_tracking
+from tracker_manager  import TrackerManager
+from config           import (
     NUM_PARTICLES,
     MOTION_NOISE,
     PATCH_SIZE,
@@ -12,56 +18,47 @@ from config import (
     VIDEO_PATH,
     OUTPUT_PATH
 )
+from tensorrt_utils   import load_engine, allocate_buffers
 
-# ---- NEW TRT imports ----
-import tensorrt as trt            # <<< 
-from tensorrt_utils import (      # <<<
-    load_engine, 
-    allocate_buffers, 
-    do_inference
+TRT_ENGINE_PATH = (
+    r"C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\feat_extractor.trt"
 )
-
-# point this at wherever you built/saved your .trt
-TRT_ENGINE_PATH = r"C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\feat_extractor.trt"  # <<<
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[INFO] Running on: {device}")
+    print(f"[INFO] Using device: {device}")
 
-    # ---- NEW: build TRT runtime + engine + buffers ----
-    TRT_LOGGER = trt.Logger(trt.Logger.WARNING)
-    runtime     = trt.Runtime(TRT_LOGGER)
-    engine      = load_engine(runtime, TRT_ENGINE_PATH)
+    # 1) Load TRT engine & buffers
+    logger = trt.Logger(trt.Logger.WARNING)
+    runtime = trt.Runtime(logger)
+    engine = load_engine(runtime, TRT_ENGINE_PATH)
     inputs, outputs, bindings, stream = allocate_buffers(engine)
-    context     = engine.create_execution_context()
-    print(f"[INFO] Loaded TRT engine from {TRT_ENGINE_PATH}")
+    context = engine.create_execution_context()
+    print(f"[INFO] Loaded TensorRT engine.")
+
+    # 2) PF manager
+    tracker = TrackerManager(
+        num_particles     = NUM_PARTICLES,
+        noise             = MOTION_NOISE,
+        patch_size        = PATCH_SIZE,
+        use_deep_features = USE_DEEP_FEATURES,
+        device            = device,
+        trt_context       = context,
+        trt_bindings      = bindings,
+        trt_inputs        = inputs,
+        trt_outputs       = outputs,
+        trt_stream        = stream,
+    )
 
     cap = cv2.VideoCapture(VIDEO_PATH)
+    fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    out = cv2.VideoWriter(OUTPUT_PATH,
+                          cv2.VideoWriter_fourcc(*"XVID"),
+                          20, (fw, fh))
 
-    tracker_manager = TrackerManager(
-        num_particles=NUM_PARTICLES,
-        noise=MOTION_NOISE,
-        patch_size=PATCH_SIZE,
-        use_deep_features=USE_DEEP_FEATURES,
-        device=device,
-
-        # <<< pass TRT bits into your tracker so it can do feature extraction
-        trt_context = context,
-        trt_bindings = bindings,
-        trt_inputs = inputs,
-        trt_outputs = outputs,
-        trt_stream = stream,
-    )
-
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-    out = cv2.VideoWriter(
-        OUTPUT_PATH,
-        cv2.VideoWriter_fourcc(*'XVID'),
-        20.0,
-        (frame_width, frame_height)
-    )
+    first = True
+    target_patch = None
 
     while True:
         ret, frame = cap.read()
@@ -70,24 +67,28 @@ def main():
             continue
 
         blobs = detect_blobs(frame)
-        # tracker_manager should internally call do_inference() when
-        # USE_DEEP_FEATURES is True, using the TRT buffers you passed in.
-        tracker_manager.update(frame, blobs)
-        centers = tracker_manager.get_estimates()
+        if first and blobs:
+            # pick first detected blob as target
+            x,y,w,h = blobs[0]
+            target_patch = frame[y:y+h, x:x+w]
+            first = False
 
-        for pf, _ in tracker_manager.trackers:
+        tracker.update(frame, blobs, target_patch)
+
+        # draw
+        for pf in tracker.trackers:
             draw_particles(frame, pf.particles)
+        centers = tracker.get_estimates()
         draw_tracking(frame, centers)
 
-        cv2.imshow("Tracking", frame)
+        cv2.imshow("Track", frame)
         out.write(frame)
-
-        if cv2.waitKey(30) & 0xFF == 27:
+        if cv2.waitKey(1)==27:
             break
 
     cap.release()
     out.release()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
+if __name__=="__main__":
     main()
