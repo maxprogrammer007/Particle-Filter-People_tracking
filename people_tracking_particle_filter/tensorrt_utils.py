@@ -1,87 +1,93 @@
-import os
-import tensorrt as trt
-import pycuda.driver as cuda
-import pycuda.autoinit  # initializes CUDA driver
+# tensorrt_utils.py
 
-# -----------------------------------------------------------------------------
-# Helpers to build / load a TRT Engine
-# -----------------------------------------------------------------------------
+import pycuda.autoinit            # creates CUDA context
+import pycuda.driver as cuda
+import tensorrt as trt
+import numpy as np
+import cv2
 
 def load_engine(runtime: trt.Runtime, engine_path: str) -> trt.ICudaEngine:
-    """Load a serialized TensorRT engine from disk."""
-    if not os.path.exists(engine_path):
-        raise FileNotFoundError(f"TensorRT engine file not found: {engine_path}")
-    with open(engine_path, "rb") as f:
-        serialized = f.read()
-    return runtime.deserialize_cuda_engine(serialized)
+    """Load a serialized TRT engine from disk (GPU)."""
+    with open(engine_path, 'rb') as f:
+        buf = f.read()
+    return runtime.deserialize_cuda_engine(buf)
 
-
-# -----------------------------------------------------------------------------
-# Helpers to allocate I/O buffers for a given engine
-# -----------------------------------------------------------------------------
-
-def allocate_buffers(engine):
+def allocate_buffers(engine: trt.ICudaEngine):
     """
-    For each binding (input + output), allocate host & device buffers
-    Returns:
-      inputs  : list of dict { 'host': np.ndarray, 'device': cuda.DeviceAllocation }
-      outputs : same for outputs
-      bindings: list of device ptrs, in binding order
-      stream  : a single CUDA stream
+    Allocate host & device buffers for each binding.
+    Returns: inputs, outputs, bindings, stream
     """
-    import numpy as np
+    # determine number of bindings
+    try:
+        num_bindings = engine.num_bindings
+    except AttributeError:
+        num_bindings = 0
+        while True:
+            try:
+                engine.get_binding_shape(num_bindings)
+                num_bindings += 1
+            except:
+                break
 
     inputs, outputs, bindings = [], [], []
     stream = cuda.Stream()
 
-    # figure out how many bindings by just trying get_binding_dtype() until it fails
-    nb = 0
-    while True:
-        try:
-            engine.get_binding_dtype(nb)
-        except:
-            break
-        nb += 1
+    for idx in range(num_bindings):
+        # clamp dynamic dims to 1
+        shp  = engine.get_binding_shape(idx)
+        shape = tuple(1 if d < 0 else d for d in shp)
+        size  = int(np.prod(shape))
+        dtype = trt.nptype(engine.get_binding_dtype(idx))
 
-    for idx in range(nb):
-        dtype = engine.get_binding_dtype(idx)
-        shape = engine.get_binding_shape(idx)
-        size  = trt.volume(shape)
-
-        # host array
-        host_mem = np.empty(size, dtype=trt.nptype(dtype))
-        # device buffer
+        host_mem = np.empty(size, dtype=dtype)
         dev_mem  = cuda.mem_alloc(host_mem.nbytes)
+        bindings.append(int(dev_mem))
 
         if engine.binding_is_input(idx):
             inputs.append({'host': host_mem, 'device': dev_mem})
         else:
             outputs.append({'host': host_mem, 'device': dev_mem})
 
-        bindings.append(int(dev_mem))
-
     return inputs, outputs, bindings, stream
 
-
-def do_inference(context, bindings, inputs, outputs, stream, batch_size=1):
+def do_inference(
+    context: trt.IExecutionContext,
+    bindings: list[int],
+    inputs: list[dict],
+    outputs: list[dict],
+    stream: cuda.Stream,
+    batch_size: int = 1
+) -> list[np.ndarray]:
     """
-    Perform inference given:
-      context  - the execution context
-      bindings - list of device pointers in TRT binding order
-      inputs   - list of dicts for each input binding
-      outputs  - list of dicts for each output binding
-      stream   - CUDA stream
-    Returns:
-      list of numpy arrays, one per output
+    Asynchronously:
+      1) H2D input copy
+      2) engine execution
+      3) D2H output copy
+      4) sync stream
     """
-    # 1) copy input host -> device
+    # host->device
     for inp in inputs:
         cuda.memcpy_htod_async(inp['device'], inp['host'], stream)
-    # 2) execute
-    context.execute_async_v2(bindings=bindings, stream_handle=stream.handle)
-    # 3) copy device -> host
+
+    # inference (on GPU)
+    context.execute_async(batch_size=batch_size,
+                          bindings=bindings,
+                          stream_handle=stream.handle)
+
+    # device->host
     for out in outputs:
         cuda.memcpy_dtoh_async(out['host'], out['device'], stream)
-    # wait for everything to finish
+
     stream.synchronize()
     return [out['host'] for out in outputs]
+
+def preprocess_for_trt(patch: np.ndarray, host_buffer: np.ndarray):
+    """
+    Copy H×W×3 uint8 BGR patch → host_buffer as
+    NCHW float32 [0..1] on CPU, ready for a GPU memcpy.
+    """
+    N, C, H, W = host_buffer.shape
+    img = cv2.resize(patch, (W, H))
+    img = img[..., ::-1].astype(np.float32) / 255.0  # BGR->RGB + normalize
+    img = img.transpose(2, 0, 1)                     # HWC->CHW
+    host_buffer[0] = img
