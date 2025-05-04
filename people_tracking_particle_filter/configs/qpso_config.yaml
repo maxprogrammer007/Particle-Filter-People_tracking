@@ -1,0 +1,43 @@
+# configs/qpso_config.yaml
+
+# ─── General Inference Settings ────────────────────────────────────────────────
+inference:
+  device: "cuda"
+  fp16: true
+  detection_interval: 2
+  batch_size: null
+
+# ─── Detector (YOLOv8n) Settings ──────────────────────────────────────────────
+detector:
+  model_path: "../yolov8n.pt"
+  imgsz: 480
+  conf_thresh: 0.30
+  iou_thresh: 0.45
+
+# ─── Feature Extractor (ShuffleNetV2) ─────────────────────────────────────────
+feature_extractor:
+  backbone: "shufflenetv2_x1.0"
+  pretrained: "../mobilenetv2_finetuned.pth"
+  output_dim: 1024
+
+# ─── Particle Filter Parameters ───────────────────────────────────────────────
+particle_filter:
+  base_particles: 100
+  noise_scale: 5.0
+  patch_size: 11
+
+# ─── Optimization (QPSO) ───────────────────────────────────────────────────────
+qpso:
+  pop_size: 50                # swarm size
+  num_iter: 40                # number of iterations
+  quantization_levels: 10     # how finely to quantize positions
+  anti_convergence: true      # enable anti-convergence logic
+  inertia_weight: 0.5         # PSO inertia
+  cognitive_coeff: 1.5        # personal best weight
+  social_coeff: 1.5           # global best weight
+
+# ─── Logging & Output ─────────────────────────────────────────────────────────
+logging:
+  log_dir: "../logs"
+  save_results: true
+  results_dir: "../data/results"
