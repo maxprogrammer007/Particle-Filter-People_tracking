@@ -17,7 +17,7 @@ detector:
 # ─── Feature Extractor (ShuffleNetV2) ─────────────────────────────────────────
 feature_extractor:
   backbone: "shufflenetv2_x1.0"
-  pretrained: "../mobilenetv2_finetuned.pth"
+  pretrained: "../shufflenet_finetuned.pth"
   output_dim: 1024
 
 # ─── Particle Filter Parameters ───────────────────────────────────────────────
