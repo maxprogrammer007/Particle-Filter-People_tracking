@@ -4,7 +4,7 @@
 inference:
   device: "cuda"
   fp16: true
-  detection_interval: 3
+  detection_interval: 2
   batch_size: null
 
 # ─── Detector (YOLOv8n) Settings ──────────────────────────────────────────────
