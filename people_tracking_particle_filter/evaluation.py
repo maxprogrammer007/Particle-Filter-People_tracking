@@ -8,7 +8,7 @@ from blob_detection import detect_blobs
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"[INFO] Using device: {device}")
 
-def run_tracking_evaluation(video_path, num_particles=75, motion_noise=5.0, patch_size=20, max_frames=None):
+def run_tracking_evaluation(video_path, num_particles=75, motion_noise=5.0, patch_size=20, max_frames=50):
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"[ERROR] Could not open video: {video_path}")
