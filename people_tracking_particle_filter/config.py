@@ -9,6 +9,9 @@ NSGA_POP_SIZE = 6
 # Detection stride interval (run blob detection every N frames)
 DETECTION_INTERVAL = 2
 
+# EMA alpha for online template update
+APPEARANCE_EMA_ALPHA = 0.03
+
 # Default fallback if best_config.txt not found
 FALLBACK_CONFIG = {
     "NUM_PARTICLES": 75,
@@ -18,7 +21,7 @@ FALLBACK_CONFIG = {
 
 def load_best_config():
     try:
-        with open("best_config.txt", "r") as f:
+        with open("C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\people_tracking_particle_filter\\best_config.txt", "r") as f:
             lines = f.readlines()
             np = int(lines[1].split(":")[1].strip())
             noise = float(lines[2].split(":")[1].strip())
@@ -38,6 +41,6 @@ NUM_PARTICLES = params["NUM_PARTICLES"]
 MOTION_NOISE = params["MOTION_NOISE"]
 PATCH_SIZE = params["PATCH_SIZE"]
 
-PARTICLE_RANGE = (80, 120)  # was (30, 150) earlier
-NOISE_RANGE = (3.0, 5.0)     # was (1.0, 10.0) earlier
-PATCH_RANGE = (14, 20)       # was (10, 40) earlier
+PARTICLE_RANGE = (80, 120)
+NOISE_RANGE = (3.0, 5.0)
+PATCH_RANGE = (12, 16)
