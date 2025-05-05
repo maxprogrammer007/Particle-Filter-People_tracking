@@ -38,6 +38,6 @@ NUM_PARTICLES = params["NUM_PARTICLES"]
 MOTION_NOISE = params["MOTION_NOISE"]
 PATCH_SIZE = params["PATCH_SIZE"]
 
-PARTICLE_RANGE = (30, 100)  # was (30, 150) earlier
+PARTICLE_RANGE = (80, 120)  # was (30, 150) earlier
 NOISE_RANGE = (3.0, 5.0)     # was (1.0, 10.0) earlier
-PATCH_RANGE = (12, 16)       # was (10, 40) earlier
+PATCH_RANGE = (14, 20)       # was (10, 40) earlier
