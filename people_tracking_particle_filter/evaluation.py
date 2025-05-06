@@ -2,10 +2,13 @@ import cv2
 import time
 import torch
 from tracker_manager import TrackerManager
+from config import VIDEO_PATH, MOTION_NOISE, PATCH_SIZE, NUM_PARTICLES
 from blob_detection import detect_blobs
 
 # Auto-detect device
+# Load fused PF
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 print(f"[INFO] Using device: {device}")
 
 def run_tracking_evaluation(video_path, num_particles=75, motion_noise=5.0, patch_size=20, max_frames=None):
@@ -32,7 +35,7 @@ def run_tracking_evaluation(video_path, num_particles=75, motion_noise=5.0, patc
             break
 
         # Optional: resize to 224x224 to speed up deep inference
-        frame = cv2.resize(frame, (160, 160))
+        #frame = cv2.resize(frame, (160, 160))
 
         start_time = time.time()
         blobs = detect_blobs(frame)
