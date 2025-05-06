@@ -1,15 +1,18 @@
+# particle_filter.py
+
 import torch
 import torch.nn.functional as F
 from torchvision.ops import roi_align
 import numpy as np
-from deep_feature_extractor import extract_features  # unified batch extractor
+import cv2
+from deep_feature_extractor import extract_features
 
 class ParticleFilter:
     def __init__(self, initial_pos, num_particles=50, noise=5.0, patch_size=20, device=None):
-        self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device        = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.num_particles = num_particles
-        self.noise = noise
-        self.patch_size = patch_size
+        self.noise         = noise
+        self.patch_size    = patch_size
 
         # Initialize particles around initial_pos
         self.particles = torch.full(
@@ -19,7 +22,11 @@ class ParticleFilter:
             device=self.device
         )
         self.particles += torch.tensor(initial_pos, device=self.device)
+
+        # Appearance template feature
         self.target_feature = None
+        # Last‐frame deep‐feature similarity
+        self.last_deep_sim = 0.0
 
     @torch.no_grad()
     def predict(self):
@@ -30,60 +37,60 @@ class ParticleFilter:
     @torch.no_grad()
     def update(self, frame, target_patch, use_deep_features=True):
         """
-        Update particle weights via deep features (batch‐ROI inside).
-        If use_deep_features is False, you can add a fallback here.
+        1) Initialize or EMA‐update the template feature
+        2) ROI‐Align all particles into patches
+        3) Resize patches to 224×224 & batch‐extract deep features
+        4) Compute & store average cosine similarity
+        5) Resample based on similarity weights
         """
-        # Initialize target template feature once
-        if use_deep_features and self.target_feature is None:
-            # Single‐patch extractor for the initial template
-            self.target_feature = extract_features([target_patch]).squeeze(0)
+        # 1) Template init / EMA update
+        if use_deep_features:
+            feat = extract_features([target_patch]).squeeze(0)  # [D]
+            if self.target_feature is None:
+                self.target_feature = feat.clone()
+            else:
+                from config import APPEARANCE_EMA_ALPHA
+                α = APPEARANCE_EMA_ALPHA
+                self.target_feature = F.normalize((1-α)*self.target_feature + α*feat, dim=0)
 
-        # Convert frame to tensor for roi_align
-        frame_tensor = torch.from_numpy(frame).permute(2, 0, 1).unsqueeze(0).float().to(self.device) / 255.0
-        frame_h, frame_w = frame_tensor.shape[2:]
-
-        # Compute ROIs for all particles
+        # 2) Build ROI‐Align input
+        ft = torch.from_numpy(frame).permute(2,0,1).unsqueeze(0).float().to(self.device)/255.0
+        _,_,H,W = ft.shape
         half = self.patch_size // 2
-        centers = self.particles.clamp(min=0)
-        x1 = (centers[:, 0] - half).clamp(0, frame_w - 1)
-        y1 = (centers[:, 1] - half).clamp(0, frame_h - 1)
-        x2 = (centers[:, 0] + half).clamp(0, frame_w - 1)
-        y2 = (centers[:, 1] + half).clamp(0, frame_h - 1)
+        c = self.particles.clamp(min=0)
+        x1 = (c[:,0]-half).clamp(0,W-1)
+        y1 = (c[:,1]-half).clamp(0,H-1)
+        x2 = (c[:,0]+half).clamp(0,W-1)
+        y2 = (c[:,1]+half).clamp(0,H-1)
         rois = torch.stack([torch.zeros_like(x1), x1, y1, x2, y2], dim=1)
 
-        # Extract patches via ROI‐Align in FP16 if available
+        # 3) Extract patches
         with torch.amp.autocast(device_type="cuda", enabled=True):
             patches = roi_align(
-                input=frame_tensor,
-                boxes=rois,
+                ft, rois,
                 output_size=(self.patch_size, self.patch_size),
                 spatial_scale=1.0,
                 aligned=True
-            )
+            )  # [N,3,ps,ps]
 
-        # Convert each patch back to HWC BGR numpy for extract_features()
-        np_patches = [
-            (p.cpu().permute(1, 2, 0).numpy() * 255).astype(np.uint8)
-            for p in patches
-        ]
+        # 4) To numpy, resize, extract features
+        np_patches = [(p.cpu().permute(1,2,0).numpy()*255).astype(np.uint8) for p in patches]
+        np_patches = [cv2.resize(p, (224,224), interpolation=cv2.INTER_LINEAR) for p in np_patches]
+        batch_feats = extract_features(np_patches)  # [N, D]
 
-        # Batch feature extraction
-        batch_feats = extract_features(np_patches)  # [N, feat_dim]
-
-        # Cosine similarity to target template
+        # 5) Cosine similarities
         sims = F.cosine_similarity(
             batch_feats,
             self.target_feature.unsqueeze(0).expand_as(batch_feats),
             dim=1
         )
+        self.last_deep_sim = float(sims.mean().item())
 
-        # Weights = exp(-distance)
-        weights = torch.exp(- (1.0 - sims))
-        probs = weights / weights.sum()
-
-        # Resample particles
-        indices = torch.multinomial(probs, self.num_particles, replacement=True)
-        self.particles = self.particles[indices]
+        # 6) Resample
+        weights = torch.exp(-(1.0 - sims))
+        probs   = weights / weights.sum()
+        idx     = torch.multinomial(probs, self.num_particles, replacement=True)
+        self.particles = self.particles[idx]
 
     @torch.no_grad()
     def estimate(self):
