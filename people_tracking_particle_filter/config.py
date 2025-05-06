@@ -18,7 +18,7 @@ FALLBACK_CONFIG = {
 
 def load_best_config():
     try:
-        with open("best_config.txt", "r") as f:
+        with open("C:\\Users\\abhin\\OneDrive\\Documents\\GitHub\\Particle-Filter-People_tracking\\people_tracking_particle_filter\\best_config.txt", "r") as f:
             lines = f.readlines()
             np = int(lines[1].split(":")[1].strip())
             noise = float(lines[2].split(":")[1].strip())
@@ -36,8 +36,12 @@ def load_best_config():
 params = load_best_config()
 NUM_PARTICLES = params["NUM_PARTICLES"]
 MOTION_NOISE = params["MOTION_NOISE"]
-PATCH_SIZE = params["PATCH_SIZE"]
+PATCH_SIZE = 32
 
 PARTICLE_RANGE = (30, 100)  # was (30, 150) earlier
 NOISE_RANGE = (3.0, 5.0)     # was (1.0, 10.0) earlier
-PATCH_RANGE = (12, 16)       # was (10, 40) earlier
+PATCH_RANGE = (24, 48)       # was (10, 40) earlier
+
+
+# For deep‐feature EMA template updates
+APPEARANCE_EMA_ALPHA = 0.03
