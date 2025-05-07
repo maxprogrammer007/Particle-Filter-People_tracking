@@ -1,0 +1,14 @@
+ultralytics>=8.0.0
+opencv-python
+numpy
+matplotlib
+scikit-learn
+tqdm
+PyYAML
+
+# Required for ByteTrack
+cython
+lap
+filterpy
+torch
+torch
