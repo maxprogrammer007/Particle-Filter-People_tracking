@@ -3,7 +3,7 @@
 
 # Particle-Filter-People_Tracking
 
-![Pareto Frontier](results/pareto_2d.png)
+![Pareto Frontier](people_tracking_project/results/pareto_2d.png)
 
 A modular, real-time people-tracking framework combining YOLOv8 detection, Deep SORT association, and a QPSO-based multi-objective optimizer for safety-critical surveillance applications (e.g. nuclear power plant control rooms). Automatically discovers Pareto-optimal trade-offs between accuracy (MOTA, IDF1) and latency (FPS).
 
